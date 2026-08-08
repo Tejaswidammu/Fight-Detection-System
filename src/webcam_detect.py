@@ -2,17 +2,37 @@ import cv2
 import numpy as np
 import tensorflow as tf
 
+# ==============================
+# SETTINGS
+# ==============================
+
 MODEL_PATH = "models/fight_detection_model.keras"
 
 IMG_SIZE = 64
 FRAMES = 20
 
-# Load trained model
+THRESHOLD = 0.90
+
+# Number of predictions to keep
+PREDICTION_HISTORY = 5
+
+
+# ==============================
+# LOAD MODEL
+# ==============================
+
+print("Loading model...")
+
 model = tf.keras.models.load_model(MODEL_PATH)
 
 print("Model loaded successfully!")
 print("Starting webcam...")
 print("Press Q to quit.")
+
+
+# ==============================
+# START CAMERA
+# ==============================
 
 cap = cv2.VideoCapture(0)
 
@@ -20,7 +40,18 @@ if not cap.isOpened():
     print("Camera could not be opened!")
     exit()
 
+
+# ==============================
+# BUFFERS
+# ==============================
+
 frame_buffer = []
+prediction_history = []
+
+
+# ==============================
+# MAIN LOOP
+# ==============================
 
 while True:
 
@@ -30,33 +61,95 @@ while True:
         print("Could not read camera frame!")
         break
 
-    # Keep original frame for display
     display_frame = frame.copy()
 
-    # Prepare frame for model
-    resized = cv2.resize(frame, (IMG_SIZE, IMG_SIZE))
-    resized = resized / 255.0
+
+    # ==============================
+    # PREPROCESS FRAME
+    # ==============================
+
+    resized = cv2.resize(
+        frame,
+        (IMG_SIZE, IMG_SIZE)
+    )
+
+    resized = resized.astype(
+        np.float32
+    ) / 255.0
 
     frame_buffer.append(resized)
+
 
     # Keep only latest 20 frames
     if len(frame_buffer) > FRAMES:
         frame_buffer.pop(0)
 
-    # Predict when 20 frames are available
+
+    # ==============================
+    # PREDICTION
+    # ==============================
+
     if len(frame_buffer) == FRAMES:
 
-        clip = np.array(frame_buffer, dtype=np.float32)
-        clip = np.expand_dims(clip, axis=0)
+        clip = np.array(
+            frame_buffer,
+            dtype=np.float32
+        )
 
-        prediction = model.predict(clip, verbose=0)[0][0]
+        clip = np.expand_dims(
+            clip,
+            axis=0
+        )
 
-        fight_probability = prediction * 100
+        prediction = model.predict(
+            clip,
+            verbose=0
+        )[0][0]
 
-        if prediction >= 0.5:
+        prediction = float(prediction)
+
+
+        # ==============================
+        # STORE PREDICTION
+        # ==============================
+
+        prediction_history.append(
+            prediction
+        )
+
+        if len(prediction_history) > PREDICTION_HISTORY:
+            prediction_history.pop(0)
+
+
+        # ==============================
+        # AVERAGE PREDICTION
+        # ==============================
+
+        average_prediction = np.mean(
+            prediction_history
+        )
+
+
+        # ==============================
+        # DECISION
+        # ==============================
+
+        if average_prediction >= THRESHOLD:
+
             label = "FIGHT DETECTED"
+
+            text_color = (0, 0, 255)
+
         else:
+
             label = "NON-FIGHT"
+
+            text_color = (0, 255, 0)
+
+
+        # ==============================
+        # DISPLAY RESULT
+        # ==============================
 
         cv2.putText(
             display_frame,
@@ -64,19 +157,22 @@ while True:
             (30, 50),
             cv2.FONT_HERSHEY_SIMPLEX,
             1.2,
-            (0, 0, 255) if prediction >= 0.5 else (0, 255, 0),
+            text_color,
             3
         )
 
+
         cv2.putText(
             display_frame,
-            f"Fight Probability: {fight_probability:.1f}%",
+            f"Fight Probability: "
+            f"{average_prediction * 100:.1f}%",
             (30, 90),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.8,
             (255, 255, 255),
             2
         )
+
 
     else:
 
@@ -90,11 +186,29 @@ while True:
             2
         )
 
-    cv2.imshow("Fight Detection - Live", display_frame)
 
-    # Press Q to quit
+    # ==============================
+    # SHOW CAMERA
+    # ==============================
+
+    cv2.imshow(
+        "Fight Detection - Live",
+        display_frame
+    )
+
+
+    # ==============================
+    # QUIT
+    # ==============================
+
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
+
+# ==============================
+# CLEANUP
+# ==============================
+
 cap.release()
+
 cv2.destroyAllWindows()

@@ -3,9 +3,10 @@ import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
-# -----------------------------
-# Settings
-# -----------------------------
+# ==============================
+# SETTINGS
+# ==============================
+
 DATA_PATH = "dataset/processed"
 MODEL_PATH = "models/fight_detection_model.keras"
 
@@ -14,16 +15,25 @@ FRAMES = 20
 BATCH_SIZE = 8
 EPOCHS = 10
 
-# -----------------------------
-# Create models folder
-# -----------------------------
+# ==============================
+# CREATE MODELS FOLDER
+# ==============================
+
 os.makedirs("models", exist_ok=True)
 
-# -----------------------------
-# Load file paths
-# -----------------------------
-fight_path = os.path.join(DATA_PATH, "Fight")
-nonfight_path = os.path.join(DATA_PATH, "NonFight")
+# ==============================
+# LOAD FILE PATHS
+# ==============================
+
+fight_path = os.path.join(
+    DATA_PATH,
+    "Fight"
+)
+
+nonfight_path = os.path.join(
+    DATA_PATH,
+    "NonFight"
+)
 
 fight_files = [
     os.path.join(fight_path, f)
@@ -37,16 +47,53 @@ nonfight_files = [
     if f.endswith(".npy")
 ]
 
-files = fight_files + nonfight_files
-labels = [1] * len(fight_files) + [0] * len(nonfight_files)
+print("Original Fight files:", len(fight_files))
+print("Original NonFight files:", len(nonfight_files))
 
-print("Fight files:", len(fight_files))
-print("NonFight files:", len(nonfight_files))
+
+# ==============================
+# BALANCE DATASET
+# ==============================
+
+np.random.seed(42)
+
+if len(nonfight_files) > len(fight_files):
+
+    nonfight_files = np.random.choice(
+        nonfight_files,
+        size=len(fight_files),
+        replace=False
+    ).tolist()
+
+elif len(fight_files) > len(nonfight_files):
+
+    fight_files = np.random.choice(
+        fight_files,
+        size=len(nonfight_files),
+        replace=False
+    ).tolist()
+
+
+# ==============================
+# CREATE FILES AND LABELS
+# ==============================
+
+files = fight_files + nonfight_files
+
+labels = (
+    [1] * len(fight_files)
+    + [0] * len(nonfight_files)
+)
+
+print("\nBalanced Fight files:", len(fight_files))
+print("Balanced NonFight files:", len(nonfight_files))
 print("Total files:", len(files))
 
-# -----------------------------
-# Train / validation split
-# -----------------------------
+
+# ==============================
+# TRAIN / VALIDATION SPLIT
+# ==============================
+
 train_files, val_files, train_labels, val_labels = train_test_split(
     files,
     labels,
@@ -55,24 +102,42 @@ train_files, val_files, train_labels, val_labels = train_test_split(
     stratify=labels
 )
 
-print("Training samples:", len(train_files))
+print("\nTraining samples:", len(train_files))
 print("Validation samples:", len(val_files))
 
-# -----------------------------
-# Data generator
-# -----------------------------
+
+# ==============================
+# DATA GENERATOR
+# ==============================
+
 class VideoDataGenerator(tf.keras.utils.Sequence):
 
-    def __init__(self, files, labels, batch_size=8, shuffle=True):
+    def __init__(
+        self,
+        files,
+        labels,
+        batch_size=8,
+        shuffle=True
+    ):
         self.files = files
         self.labels = labels
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.indices = np.arange(len(self.files))
+
+        self.indices = np.arange(
+            len(self.files)
+        )
+
         self.on_epoch_end()
 
     def __len__(self):
-        return int(np.ceil(len(self.files) / self.batch_size))
+
+        return int(
+            np.ceil(
+                len(self.files)
+                / self.batch_size
+            )
+        )
 
     def __getitem__(self, index):
 
@@ -85,18 +150,38 @@ class VideoDataGenerator(tf.keras.utils.Sequence):
         batch_y = []
 
         for i in batch_indices:
-            data = np.load(self.files[i])
+
+            data = np.load(
+                self.files[i]
+            )
 
             batch_x.append(data)
-            batch_y.append(self.labels[i])
+            batch_y.append(
+                self.labels[i]
+            )
 
-        return np.array(batch_x, dtype=np.float32), np.array(batch_y, dtype=np.float32)
+        return (
+            np.array(
+                batch_x,
+                dtype=np.float32
+            ),
+            np.array(
+                batch_y,
+                dtype=np.float32
+            )
+        )
 
     def on_epoch_end(self):
 
         if self.shuffle:
-            np.random.shuffle(self.indices)
+            np.random.shuffle(
+                self.indices
+            )
 
+
+# ==============================
+# CREATE GENERATORS
+# ==============================
 
 train_generator = VideoDataGenerator(
     train_files,
@@ -111,29 +196,48 @@ val_generator = VideoDataGenerator(
     shuffle=False
 )
 
-# -----------------------------
-# CNN + LSTM Model
-# -----------------------------
+
+# ==============================
+# CNN + LSTM MODEL
+# ==============================
+
 model = tf.keras.Sequential([
 
     tf.keras.layers.Input(
-        shape=(FRAMES, IMG_SIZE, IMG_SIZE, 3)
+        shape=(
+            FRAMES,
+            IMG_SIZE,
+            IMG_SIZE,
+            3
+        )
     ),
 
     tf.keras.layers.TimeDistributed(
-        tf.keras.layers.Conv2D(32, (3, 3), activation="relu")
+        tf.keras.layers.Conv2D(
+            32,
+            (3, 3),
+            activation="relu"
+        )
     ),
 
     tf.keras.layers.TimeDistributed(
-        tf.keras.layers.MaxPooling2D((2, 2))
+        tf.keras.layers.MaxPooling2D(
+            (2, 2)
+        )
     ),
 
     tf.keras.layers.TimeDistributed(
-        tf.keras.layers.Conv2D(64, (3, 3), activation="relu")
+        tf.keras.layers.Conv2D(
+            64,
+            (3, 3),
+            activation="relu"
+        )
     ),
 
     tf.keras.layers.TimeDistributed(
-        tf.keras.layers.MaxPooling2D((2, 2))
+        tf.keras.layers.MaxPooling2D(
+            (2, 2)
+        )
     ),
 
     tf.keras.layers.TimeDistributed(
@@ -144,35 +248,62 @@ model = tf.keras.Sequential([
 
     tf.keras.layers.Dropout(0.5),
 
-    tf.keras.layers.Dense(32, activation="relu"),
+    tf.keras.layers.Dense(
+        32,
+        activation="relu"
+    ),
 
-    tf.keras.layers.Dense(1, activation="sigmoid")
+    tf.keras.layers.Dense(
+        1,
+        activation="sigmoid"
+    )
 ])
 
-# -----------------------------
-# Compile
-# -----------------------------
+
+# ==============================
+# COMPILE MODEL
+# ==============================
+
 model.compile(
     optimizer="adam",
     loss="binary_crossentropy",
     metrics=["accuracy"]
 )
 
+
+# ==============================
+# MODEL SUMMARY
+# ==============================
+
 model.summary()
 
-# -----------------------------
-# Train
-# -----------------------------
+
+# ==============================
+# TRAIN MODEL
+# ==============================
+
+print("\nStarting training...\n")
+
 history = model.fit(
     train_generator,
     validation_data=val_generator,
     epochs=EPOCHS
 )
 
-# -----------------------------
-# Save model
-# -----------------------------
-model.save(MODEL_PATH)
 
-print("\nTraining completed!")
-print("Model saved to:", MODEL_PATH)
+# ==============================
+# SAVE MODEL
+# ==============================
+
+model.save(
+    MODEL_PATH
+)
+
+print("\n==============================")
+print("Training completed!")
+print("==============================")
+
+print(
+    "Model saved to:",
+    MODEL_PATH
+)
